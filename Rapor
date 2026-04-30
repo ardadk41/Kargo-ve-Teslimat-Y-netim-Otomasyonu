@@ -1,0 +1,419 @@
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
+using KargoYonetim.Data;
+
+namespace KargoYonetim.Business
+{
+    public static class PdfRaporlar
+    {
+        private static readonly string RaporKlasoru = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Raporlar");
+
+        static PdfRaporlar()
+        {
+            if (!Directory.Exists(RaporKlasoru))
+                Directory.CreateDirectory(RaporKlasoru);
+        }
+
+        /// <summary>
+        /// Rapor 1: Kurye Performans ve Başarı Oranı Raporu (PDF)
+        /// SUM(basarili)/COUNT(*)*100 GROUP BY kurye — tablo
+        /// </summary>
+        public static string KuryePerformansRaporu()
+        {
+            var performans = DatabaseHelper.GetKuryePerformans();
+            var dosyaAdi = $"Kurye_Performans_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+            var dosyaYolu = Path.Combine(RaporKlasoru, dosyaAdi);
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(1.5f, Unit.Centimetre);
+                    page.DefaultTextStyle(x => x.FontSize(10));
+
+                    page.Header().Column(col =>
+                    {
+                        col.Item().Background(Colors.Blue.Darken3).Padding(15).Row(row =>
+                        {
+                            row.RelativeItem().Text("KURYE PERFORMANS RAPORU")
+                                .FontSize(18).Bold().FontColor(Colors.White);
+                            row.ConstantItem(150).AlignRight().Text(DateTime.Now.ToString("dd.MM.yyyy HH:mm"))
+                                .FontSize(10).FontColor(Colors.White);
+                        });
+                        col.Item().Height(5);
+                    });
+
+                    page.Content().PaddingVertical(10).Column(col =>
+                    {
+                        col.Spacing(15);
+
+                        // Summary
+                        col.Item().Text("Kurye Bazlı Performans Özeti").FontSize(14).Bold()
+                            .FontColor(Colors.Blue.Darken3);
+
+                        // Table
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.RelativeColumn(2);    // Kurye Adı
+                                columns.RelativeColumn(1.5f); // Kurye Tipi
+                                columns.RelativeColumn(1);    // Toplam Deneme
+                                columns.RelativeColumn(1);    // Başarılı
+                                columns.RelativeColumn(1);    // Başarı Oranı
+                                columns.RelativeColumn(1);    // Ort. Teslim
+                            });
+
+                            // Header
+                            table.Header(header =>
+                            {
+                                var headerStyle = TextStyle.Default.Bold().FontColor(Colors.White).FontSize(9);
+
+                                header.Cell().Background(Colors.Blue.Darken2).Padding(5)
+                                    .Text("Kurye Adı").Style(headerStyle);
+                                header.Cell().Background(Colors.Blue.Darken2).Padding(5)
+                                    .Text("Kurye Tipi").Style(headerStyle);
+                                header.Cell().Background(Colors.Blue.Darken2).Padding(5)
+                                    .Text("Toplam Deneme").Style(headerStyle);
+                                header.Cell().Background(Colors.Blue.Darken2).Padding(5)
+                                    .Text("Başarılı").Style(headerStyle);
+                                header.Cell().Background(Colors.Blue.Darken2).Padding(5)
+                                    .Text("Başarı Oranı").Style(headerStyle);
+                                header.Cell().Background(Colors.Blue.Darken2).Padding(5)
+                                    .Text("Ort. Teslim (Gün)").Style(headerStyle);
+                            });
+
+                            // Data rows
+                            bool alternate = false;
+                            foreach (var p in performans)
+                            {
+                                var bgColor = alternate ? Colors.Grey.Lighten4 : Colors.White;
+                                var cellStyle = TextStyle.Default.FontSize(9);
+
+                                table.Cell().Background(bgColor).Padding(5)
+                                    .Text(p.KuryeAdi).Style(cellStyle);
+                                table.Cell().Background(bgColor).Padding(5)
+                                    .Text(IsGunuHesaplama.KuryeTipiAdi(p.KuryeTipi)).Style(cellStyle);
+                                table.Cell().Background(bgColor).Padding(5).AlignCenter()
+                                    .Text(p.ToplamDeneme.ToString()).Style(cellStyle);
+                                table.Cell().Background(bgColor).Padding(5).AlignCenter()
+                                    .Text(p.BasariliDeneme.ToString()).Style(cellStyle);
+                                table.Cell().Background(bgColor).Padding(5).AlignCenter()
+                                    .Text($"%{p.BasariOrani:F1}").Style(cellStyle)
+                                    .FontColor(p.BasariOrani >= 70 ? Colors.Green.Darken2 : Colors.Red.Darken2);
+                                table.Cell().Background(bgColor).Padding(5).AlignCenter()
+                                    .Text(p.OrtTeslimGun > 0 ? $"{p.OrtTeslimGun:F1}" : "-").Style(cellStyle);
+
+                                alternate = !alternate;
+                            }
+                        });
+
+                        // Bar chart approximation using colored bars
+                        col.Item().Text("Başarı Oranı Grafiği").FontSize(14).Bold()
+                            .FontColor(Colors.Blue.Darken3);
+
+                        foreach (var p in performans)
+                        {
+                            col.Item().Row(row =>
+                            {
+                                row.ConstantItem(120).AlignRight().PaddingRight(10).AlignMiddle()
+                                    .Text(p.KuryeAdi).FontSize(9);
+                                row.RelativeItem().Height(20).Layers(layers =>
+                                {
+                                    layers.Layer().Background(Colors.Grey.Lighten3);
+                                    layers.Layer().Width((float)(p.BasariOrani * 3.5f)).Background(
+                                        p.BasariOrani >= 70 ? Colors.Green.Medium :
+                                        p.BasariOrani >= 40 ? Colors.Orange.Medium : Colors.Red.Medium);
+                                });
+                                row.ConstantItem(60).AlignLeft().PaddingLeft(5).AlignMiddle()
+                                    .Text($"%{p.BasariOrani:F1}").FontSize(9).Bold();
+                            });
+                            col.Item().Height(5);
+                        }
+                    });
+
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span("Kargo ve Teslimat Yönetim Otomasyonu — Sayfa ");
+                        x.CurrentPageNumber();
+                        x.Span(" / ");
+                        x.TotalPages();
+                    });
+                });
+            }).GeneratePdf(dosyaYolu);
+
+            return dosyaYolu;
+        }
+
+        /// <summary>
+        /// Rapor 2: Gecikmiş ve İade Sipariş Listesi (PDF)
+        /// </summary>
+        public static string GecikmisSiparisRaporu()
+        {
+            var gecikmisSiparisler = DatabaseHelper.GetGecikmisSiparisler();
+            var iadeSiparisler = DatabaseHelper.GetIadeSiparisler();
+            var dosyaAdi = $"Gecikmiş_ve_İade_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+            var dosyaYolu = Path.Combine(RaporKlasoru, dosyaAdi);
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(1.5f, Unit.Centimetre);
+                    page.DefaultTextStyle(x => x.FontSize(10));
+
+                    page.Header().Column(col =>
+                    {
+                        col.Item().Background(Colors.Red.Darken3).Padding(15).Row(row =>
+                        {
+                            row.RelativeItem().Text("GECİKMİŞ VE İADE SİPARİŞ LİSTESİ")
+                                .FontSize(18).Bold().FontColor(Colors.White);
+                            row.ConstantItem(150).AlignRight().Text(DateTime.Now.ToString("dd.MM.yyyy HH:mm"))
+                                .FontSize(10).FontColor(Colors.White);
+                        });
+                        col.Item().Height(5);
+                    });
+
+                    page.Content().PaddingVertical(10).Column(col =>
+                    {
+                        col.Spacing(15);
+
+                        // Gecikmiş siparişler
+                        col.Item().Text($"Gecikmiş Siparişler ({gecikmisSiparisler.Count} adet)")
+                            .FontSize(14).Bold().FontColor(Colors.Red.Darken3);
+
+                        if (gecikmisSiparisler.Count == 0)
+                        {
+                            col.Item().Padding(10).Text("Gecikmiş sipariş bulunmamaktadır.")
+                                .FontSize(10).Italic().FontColor(Colors.Grey.Medium);
+                        }
+                        else
+                        {
+                            col.Item().Table(table =>
+                            {
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.ConstantColumn(40);
+                                    columns.RelativeColumn(2);
+                                    columns.RelativeColumn(1.5f);
+                                    columns.RelativeColumn(1);
+                                    columns.RelativeColumn(1);
+                                    columns.RelativeColumn(1);
+                                });
+
+                                table.Header(header =>
+                                {
+                                    var hs = TextStyle.Default.Bold().FontColor(Colors.White).FontSize(9);
+                                    header.Cell().Background(Colors.Red.Darken2).Padding(4).Text("No").Style(hs);
+                                    header.Cell().Background(Colors.Red.Darken2).Padding(4).Text("Müşteri").Style(hs);
+                                    header.Cell().Background(Colors.Red.Darken2).Padding(4).Text("Kurye").Style(hs);
+                                    header.Cell().Background(Colors.Red.Darken2).Padding(4).Text("Sipariş Tarihi").Style(hs);
+                                    header.Cell().Background(Colors.Red.Darken2).Padding(4).Text("Tahmini Teslim").Style(hs);
+                                    header.Cell().Background(Colors.Red.Darken2).Padding(4).Text("Durum").Style(hs);
+                                });
+
+                                bool alt = false;
+                                foreach (var s in gecikmisSiparisler)
+                                {
+                                    var bg = alt ? Colors.Red.Lighten5 : Colors.White;
+                                    var cs = TextStyle.Default.FontSize(9);
+                                    table.Cell().Background(bg).Padding(4).Text(s.Id.ToString()).Style(cs);
+                                    table.Cell().Background(bg).Padding(4).Text(s.MusteriAdi ?? "-").Style(cs);
+                                    table.Cell().Background(bg).Padding(4).Text(s.KuryeAdi ?? "-").Style(cs);
+                                    table.Cell().Background(bg).Padding(4).Text(s.SiparisTarihi ?? "-").Style(cs);
+                                    table.Cell().Background(bg).Padding(4).Text(s.TahminiTeslim ?? "-").Style(cs);
+                                    table.Cell().Background(bg).Padding(4).Text(s.Durum).Style(cs);
+                                    alt = !alt;
+                                }
+                            });
+                        }
+
+                        // İade siparişler
+                        col.Item().PaddingTop(20).Text($"İade Bekleyen Siparişler ({iadeSiparisler.Count} adet)")
+                            .FontSize(14).Bold().FontColor(Colors.Orange.Darken3);
+
+                        if (iadeSiparisler.Count == 0)
+                        {
+                            col.Item().Padding(10).Text("İade bekleyen sipariş bulunmamaktadır.")
+                                .FontSize(10).Italic().FontColor(Colors.Grey.Medium);
+                        }
+                        else
+                        {
+                            col.Item().Table(table =>
+                            {
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.ConstantColumn(40);
+                                    columns.RelativeColumn(2);
+                                    columns.RelativeColumn(1.5f);
+                                    columns.RelativeColumn(1);
+                                    columns.RelativeColumn(1);
+                                });
+
+                                table.Header(header =>
+                                {
+                                    var hs = TextStyle.Default.Bold().FontColor(Colors.White).FontSize(9);
+                                    header.Cell().Background(Colors.Orange.Darken2).Padding(4).Text("No").Style(hs);
+                                    header.Cell().Background(Colors.Orange.Darken2).Padding(4).Text("Müşteri").Style(hs);
+                                    header.Cell().Background(Colors.Orange.Darken2).Padding(4).Text("Kurye").Style(hs);
+                                    header.Cell().Background(Colors.Orange.Darken2).Padding(4).Text("Sipariş Tarihi").Style(hs);
+                                    header.Cell().Background(Colors.Orange.Darken2).Padding(4).Text("Tahmini Teslim").Style(hs);
+                                });
+
+                                bool alt = false;
+                                foreach (var s in iadeSiparisler)
+                                {
+                                    var bg = alt ? Colors.Orange.Lighten5 : Colors.White;
+                                    var cs = TextStyle.Default.FontSize(9);
+                                    table.Cell().Background(bg).Padding(4).Text(s.Id.ToString()).Style(cs);
+                                    table.Cell().Background(bg).Padding(4).Text(s.MusteriAdi ?? "-").Style(cs);
+                                    table.Cell().Background(bg).Padding(4).Text(s.KuryeAdi ?? "-").Style(cs);
+                                    table.Cell().Background(bg).Padding(4).Text(s.SiparisTarihi ?? "-").Style(cs);
+                                    table.Cell().Background(bg).Padding(4).Text(s.TahminiTeslim ?? "-").Style(cs);
+                                    alt = !alt;
+                                }
+                            });
+                        }
+                    });
+
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span("Kargo ve Teslimat Yönetim Otomasyonu — Sayfa ");
+                        x.CurrentPageNumber();
+                        x.Span(" / ");
+                        x.TotalPages();
+                    });
+                });
+            }).GeneratePdf(dosyaYolu);
+
+            return dosyaYolu;
+        }
+
+        /// <summary>
+        /// Rapor 3: Aylık Lojistik Operasyon Özeti (PDF)
+        /// </summary>
+        public static string AylikOzetRaporu()
+        {
+            var stats = DatabaseHelper.GetDashboardStats();
+            var performans = DatabaseHelper.GetKuryePerformans();
+            var dosyaAdi = $"Aylik_Ozet_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+            var dosyaYolu = Path.Combine(RaporKlasoru, dosyaAdi);
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(1.5f, Unit.Centimetre);
+                    page.DefaultTextStyle(x => x.FontSize(10));
+
+                    page.Header().Column(col =>
+                    {
+                        col.Item().Background(Colors.Teal.Darken3).Padding(15).Row(row =>
+                        {
+                            row.RelativeItem().Text("AYLIK LOJİSTİK OPERASYON ÖZETİ")
+                                .FontSize(18).Bold().FontColor(Colors.White);
+                            row.ConstantItem(150).AlignRight().Text(DateTime.Now.ToString("MMMM yyyy"))
+                                .FontSize(12).FontColor(Colors.White);
+                        });
+                        col.Item().Height(5);
+                    });
+
+                    page.Content().PaddingVertical(10).Column(col =>
+                    {
+                        col.Spacing(15);
+
+                        // Summary Cards
+                        col.Item().Text("Genel İstatistikler").FontSize(14).Bold()
+                            .FontColor(Colors.Teal.Darken3);
+
+                        col.Item().Row(row =>
+                        {
+                            void StatBox(IContainer container, string label, int value, string color)
+                            {
+                                container.Border(1).BorderColor(Colors.Grey.Lighten2).Padding(10).Column(c =>
+                                {
+                                    c.Item().AlignCenter().Text(value.ToString()).FontSize(24).Bold()
+                                        .FontColor(color);
+                                    c.Item().AlignCenter().Text(label).FontSize(9);
+                                });
+                            }
+
+                            row.RelativeItem().Padding(3);
+                            StatBox(row.RelativeItem(), "Toplam Sipariş", stats.GetValueOrDefault("Toplam"), Colors.Blue.Darken2);
+                            row.RelativeItem().Padding(3);
+                            StatBox(row.RelativeItem(), "Teslim Edildi", stats.GetValueOrDefault("TeslimEdildi"), Colors.Green.Darken2);
+                            row.RelativeItem().Padding(3);
+                            StatBox(row.RelativeItem(), "Yolda", stats.GetValueOrDefault("Yolda"), Colors.Orange.Darken2);
+                            row.RelativeItem().Padding(3);
+                            StatBox(row.RelativeItem(), "İade Bekliyor", stats.GetValueOrDefault("IadeBekliyor"), Colors.Red.Darken2);
+                            row.RelativeItem().Padding(3);
+                            StatBox(row.RelativeItem(), "Gecikmiş", stats.GetValueOrDefault("Gecikmiş"), Colors.Red.Darken4);
+                            row.RelativeItem().Padding(3);
+                        });
+
+                        // Kurye performans tablosu
+                        col.Item().PaddingTop(10).Text("Kurye Performansları").FontSize(14).Bold()
+                            .FontColor(Colors.Teal.Darken3);
+
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.RelativeColumn(2);
+                                columns.RelativeColumn(1.5f);
+                                columns.RelativeColumn(1);
+                                columns.RelativeColumn(1);
+                                columns.RelativeColumn(1);
+                            });
+
+                            table.Header(header =>
+                            {
+                                var hs = TextStyle.Default.Bold().FontColor(Colors.White).FontSize(9);
+                                header.Cell().Background(Colors.Teal.Darken2).Padding(4).Text("Kurye").Style(hs);
+                                header.Cell().Background(Colors.Teal.Darken2).Padding(4).Text("Tipi").Style(hs);
+                                header.Cell().Background(Colors.Teal.Darken2).Padding(4).Text("Toplam").Style(hs);
+                                header.Cell().Background(Colors.Teal.Darken2).Padding(4).Text("Başarılı").Style(hs);
+                                header.Cell().Background(Colors.Teal.Darken2).Padding(4).Text("Oran").Style(hs);
+                            });
+
+                            bool alt = false;
+                            foreach (var p in performans)
+                            {
+                                var bg = alt ? Colors.Teal.Lighten5 : Colors.White;
+                                var cs = TextStyle.Default.FontSize(9);
+                                table.Cell().Background(bg).Padding(4).Text(p.KuryeAdi).Style(cs);
+                                table.Cell().Background(bg).Padding(4).Text(p.KuryeTipi).Style(cs);
+                                table.Cell().Background(bg).Padding(4).AlignCenter().Text(p.ToplamDeneme.ToString()).Style(cs);
+                                table.Cell().Background(bg).Padding(4).AlignCenter().Text(p.BasariliDeneme.ToString()).Style(cs);
+                                table.Cell().Background(bg).Padding(4).AlignCenter().Text($"%{p.BasariOrani:F1}").Style(cs);
+                                alt = !alt;
+                            }
+                        });
+
+                        col.Item().PaddingTop(20).Background(Colors.Grey.Lighten4).Padding(10).Column(c =>
+                        {
+                            c.Item().Text("Notlar:").Bold().FontSize(10);
+                            c.Item().Text("• Bu rapor otomatik olarak oluşturulmuştur.").FontSize(9);
+                            c.Item().Text("• Gecikmiş siparişler tahmini teslim tarihine göre hesaplanmıştır.").FontSize(9);
+                            c.Item().Text("• Başarı oranları tüm teslimat denemelerine göre hesaplanmıştır.").FontSize(9);
+                        });
+                    });
+
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span("Kargo ve Teslimat Yönetim Otomasyonu — Sayfa ");
+                        x.CurrentPageNumber();
+                        x.Span(" / ");
+                        x.TotalPages();
+                    });
+                });
+            }).GeneratePdf(dosyaYolu);
+
+            return dosyaYolu;
+        }
+    }
+}
