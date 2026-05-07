@@ -1,0 +1,17 @@
+using KargoYonetim.Data;
+using KargoYonetim.Forms;
+
+namespace KargoYonetim
+{
+    static class Program
+    {
+        [STAThread]
+        static void Main()
+        {
+            QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+            ApplicationConfiguration.Initialize();
+            DatabaseHelper.InitializeDatabase();
+            Application.Run(new FormAna());
+        }
+    }
+}
