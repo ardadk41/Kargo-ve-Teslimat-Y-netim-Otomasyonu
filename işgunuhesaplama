@@ -1,0 +1,100 @@
+using KargoYonetim.Data;
+
+namespace KargoYonetim.Business
+{
+    public static class IsGunuHesaplama
+    {
+        /// <summary>
+        /// Kurye tipine göre tahmini teslim tarihini hesaplar.
+        /// Standart: +3 iş günü, Ekspres: +1 iş günü, AyniGun: +0 (aynı gün veya sonraki iş günü)
+        /// </summary>
+        public static DateTime TahminiTeslimHesapla(DateTime siparisTarihi, string kuryeTipi)
+        {
+            int gun = kuryeTipi switch
+            {
+                "Standart" => 3,
+                "Ekspres" => 1,
+                "AyniGun" => 0,
+                _ => 3
+            };
+
+            if (gun == 0)
+            {
+                // Aynı gün teslimat: bugün iş günüyse bugün, değilse sonraki iş günü
+                var tarih = siparisTarihi.Date;
+                while (!IsGunuMu(tarih))
+                    tarih = tarih.AddDays(1);
+                return tarih;
+            }
+
+            return IsGunuEkle(siparisTarihi.Date, gun);
+        }
+
+        /// <summary>
+        /// Başlangıç tarihine N iş günü ekler.
+        /// Cumartesi, Pazar ve resmi tatilleri atlar.
+        /// </summary>
+        public static DateTime IsGunuEkle(DateTime baslangic, int gun)
+        {
+            var tarih = baslangic;
+            int eklenen = 0;
+
+            while (eklenen < gun)
+            {
+                tarih = tarih.AddDays(1);
+                if (IsGunuMu(tarih))
+                    eklenen++;
+            }
+
+            return tarih;
+        }
+
+        /// <summary>
+        /// Verilen tarihin iş günü olup olmadığını kontrol eder.
+        /// Hafta sonu (Cumartesi, Pazar) ve resmi tatiller iş günü değildir.
+        /// Edge case: Hafta sonu + resmi tatil üst üste gelirse, her iki tatil türü ayrı ayrı dışarıda sayılır.
+        /// </summary>
+        public static bool IsGunuMu(DateTime tarih)
+        {
+            // Hafta sonu kontrolü
+            if (tarih.DayOfWeek == DayOfWeek.Saturday || tarih.DayOfWeek == DayOfWeek.Sunday)
+                return false;
+
+            // Resmi tatil kontrolü (veritabanından)
+            return !DatabaseHelper.IsTatilGunu(tarih);
+        }
+
+        /// <summary>
+        /// İki tarih arasındaki iş günü sayısını hesaplar.
+        /// </summary>
+        public static int IsGunuFarki(DateTime baslangic, DateTime bitis)
+        {
+            int count = 0;
+            var tarih = baslangic.Date;
+            var hedef = bitis.Date;
+
+            while (tarih < hedef)
+            {
+                tarih = tarih.AddDays(1);
+                if (IsGunuMu(tarih))
+                    count++;
+            }
+
+            return count;
+        }
+
+        /// <summary>
+        /// Kurye tipi adını kullanıcı dostu formata çevirir
+        /// </summary>
+        public static string KuryeTipiAdi(string kuryeTipi)
+        {
+            return kuryeTipi switch
+            {
+                "Standart" => "Standart (+3 iş günü)",
+                "Ekspres" => "Ekspres (+1 iş günü)",
+                "AyniGun" => "Aynı Gün (+0)",
+                _ => kuryeTipi
+            };
+        }
+    }
+}
