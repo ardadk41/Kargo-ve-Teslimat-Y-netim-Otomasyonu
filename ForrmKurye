@@ -1,0 +1,261 @@
+using KargoYonetim.Data;
+
+namespace KargoYonetim.Forms
+{
+    public class FormKurye : Form
+    {
+        private TextBox txtAdSoyad = null!, txtTelefon = null!;
+        private ComboBox cmbKuryeTipi = null!;
+        private DataGridView dgv = null!;
+        private int selectedId = -1;
+
+        public FormKurye()
+        {
+            InitializeComponents();
+            LoadData();
+        }
+
+        private void InitializeComponents()
+        {
+            this.Text = "🚚 Kurye Yönetimi";
+            this.Size = new Size(900, 580);
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.Font = new Font("Segoe UI", 10);
+            this.BackColor = Color.FromArgb(236, 240, 241);
+
+            var pnlHeader = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = Color.FromArgb(27, 40, 56) };
+            pnlHeader.Controls.Add(new Label
+            {
+                Text = "  🚚  Kurye Yönetimi",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 14, FontStyle.Bold),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            });
+            this.Controls.Add(pnlHeader);
+
+            var pnlInput = new Panel { Dock = DockStyle.Top, Height = 130, Padding = new Padding(15, 10, 15, 5), BackColor = Color.White };
+
+            pnlInput.Controls.Add(new Label { Text = "Ad Soyad:", Location = new Point(10, 15), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+            txtAdSoyad = new TextBox { Location = new Point(110, 12), Size = new Size(200, 28), BorderStyle = BorderStyle.FixedSingle };
+            pnlInput.Controls.Add(txtAdSoyad);
+
+            pnlInput.Controls.Add(new Label { Text = "Telefon:", Location = new Point(330, 15), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+            txtTelefon = new TextBox { Location = new Point(410, 12), Size = new Size(180, 28), BorderStyle = BorderStyle.FixedSingle, MaxLength = 11 };
+            txtTelefon.KeyPress += TxtTelefon_KeyPress;
+            pnlInput.Controls.Add(txtTelefon);
+
+            pnlInput.Controls.Add(new Label { Text = "Kurye Tipi:", Location = new Point(610, 15), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+            cmbKuryeTipi = new ComboBox { Location = new Point(700, 12), Size = new Size(120, 28), DropDownStyle = ComboBoxStyle.DropDownList };
+            cmbKuryeTipi.Items.AddRange(new[] { "Standart", "Ekspres", "AyniGun" });
+            cmbKuryeTipi.SelectedIndex = 0;
+            pnlInput.Controls.Add(cmbKuryeTipi);
+
+            var btnEkle = CreateButton("➕ Ekle", 10, 55, Color.FromArgb(76, 175, 80));
+            btnEkle.Click += BtnEkle_Click;
+            pnlInput.Controls.Add(btnEkle);
+
+            var btnGuncelle = CreateButton("✏️ Güncelle", 140, 55, Color.FromArgb(33, 150, 243));
+            btnGuncelle.Click += BtnGuncelle_Click;
+            pnlInput.Controls.Add(btnGuncelle);
+
+            var btnSil = CreateButton("🗑️ Pasif Yap", 270, 55, Color.FromArgb(244, 67, 54));
+            btnSil.Click += BtnSil_Click;
+            pnlInput.Controls.Add(btnSil);
+
+            var btnAktifYap = CreateButton("✅ Aktif Yap", 400, 55, Color.FromArgb(0, 150, 136));
+            btnAktifYap.Click += BtnAktifYap_Click;
+            pnlInput.Controls.Add(btnAktifYap);
+
+            var btnTemizle = CreateButton("🧹 Temizle", 530, 55, Color.FromArgb(117, 117, 117));
+            btnTemizle.Click += (s, e) => ClearForm();
+            pnlInput.Controls.Add(btnTemizle);
+
+            this.Controls.Add(pnlInput);
+
+            dgv = new DataGridView
+            {
+                Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                AutoGenerateColumns = false,
+                BackgroundColor = Color.White, BorderStyle = BorderStyle.None,
+                RowHeadersVisible = false, Font = new Font("Segoe UI", 9),
+                AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(245, 245, 245) },
+                DefaultCellStyle = new DataGridViewCellStyle { SelectionBackColor = Color.FromArgb(33, 150, 243) }
+            };
+            dgv.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.FromArgb(27, 40, 56), ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold), Padding = new Padding(5)
+            };
+            dgv.EnableHeadersVisualStyles = false;
+            dgv.CellClick += Dgv_CellClick;
+            dgv.CellFormatting += Dgv_CellFormatting;
+
+            dgv.Columns.AddRange(
+                new DataGridViewTextBoxColumn { Name = "Id", DataPropertyName = "Id", HeaderText = "No", Width = 50 },
+                new DataGridViewTextBoxColumn { Name = "AdSoyad", DataPropertyName = "AdSoyad", HeaderText = "Ad Soyad" },
+                new DataGridViewTextBoxColumn { Name = "Telefon", DataPropertyName = "Telefon", HeaderText = "Telefon" },
+                new DataGridViewTextBoxColumn { Name = "KuryeTipi", DataPropertyName = "KuryeTipi", HeaderText = "Kurye Tipi" },
+                new DataGridViewTextBoxColumn { Name = "Aktif", DataPropertyName = "Aktif", HeaderText = "Durum", Width = 80 }
+            );
+
+            var pnlGrid = new Panel { Dock = DockStyle.Fill, Padding = new Padding(15, 10, 15, 15) };
+            pnlGrid.Controls.Add(dgv);
+
+            // WinForms Dock sıralaması: Fill önce, Top paneller sonra (ters sırada) eklenmeli
+            this.Controls.Clear();
+            this.Controls.Add(pnlGrid);
+            this.Controls.Add(pnlInput);
+            this.Controls.Add(pnlHeader);
+        }
+
+        private Button CreateButton(string text, int x, int y, Color color)
+        {
+            var btn = new Button
+            {
+                Text = text, Location = new Point(x, y), Size = new Size(120, 36),
+                FlatStyle = FlatStyle.Flat, BackColor = color, ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold), Cursor = Cursors.Hand
+            };
+            btn.FlatAppearance.BorderSize = 0;
+            return btn;
+        }
+
+        private void LoadData()
+        {
+            dgv.DataSource = DatabaseHelper.GetTumKuryeler();
+        }
+
+        private void ClearForm()
+        {
+            txtAdSoyad.Clear(); txtTelefon.Clear();
+            cmbKuryeTipi.SelectedIndex = 0;
+            selectedId = -1;
+            dgv.ClearSelection();
+        }
+
+        private void Dgv_CellClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0) return;
+            var row = dgv.Rows[e.RowIndex];
+            selectedId = Convert.ToInt32(row.Cells["Id"].Value);
+            txtAdSoyad.Text = row.Cells["AdSoyad"].Value?.ToString();
+            txtTelefon.Text = row.Cells["Telefon"].Value?.ToString();
+            var tipi = row.Cells["KuryeTipi"].Value?.ToString();
+            cmbKuryeTipi.SelectedItem = tipi;
+        }
+
+        private void Dgv_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (dgv.Columns[e.ColumnIndex].Name == "Aktif" && e.Value != null)
+            {
+                int aktifVal = Convert.ToInt32(e.Value);
+                if (aktifVal == 1)
+                {
+                    e.Value = "Aktif";
+                    e.CellStyle.ForeColor = Color.White;
+                    e.CellStyle.BackColor = Color.FromArgb(76, 175, 80);
+                    e.CellStyle.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+                }
+                else
+                {
+                    e.Value = "Pasif";
+                    e.CellStyle.ForeColor = Color.White;
+                    e.CellStyle.BackColor = Color.FromArgb(244, 67, 54);
+                    e.CellStyle.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+                }
+                e.FormattingApplied = true;
+            }
+
+            // Pasif kuryelerin tüm satırını soluklaştır
+            if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name != "Aktif")
+            {
+                var aktifCell = dgv.Rows[e.RowIndex].Cells["Aktif"];
+                if (aktifCell.Value != null && Convert.ToInt32(aktifCell.Value) == 0)
+                {
+                    e.CellStyle.ForeColor = Color.FromArgb(160, 160, 160);
+                    e.CellStyle.BackColor = Color.FromArgb(240, 240, 240);
+                }
+            }
+        }
+
+        private void BtnEkle_Click(object? sender, EventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(txtAdSoyad.Text))
+            { MessageBox.Show("Ad Soyad zorunludur.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            if (txtTelefon.Text.Length != 11)
+            { MessageBox.Show("Eksik numara girildi!\nTelefon numarası 11 haneli olmalıdır. (Örn: 05XX XXX XX XX)", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); txtTelefon.Focus(); return; }
+
+            DatabaseHelper.AddKurye(new Kurye { AdSoyad = txtAdSoyad.Text, Telefon = txtTelefon.Text, KuryeTipi = cmbKuryeTipi.Text });
+            MessageBox.Show("Kurye eklendi.", "Başarılı", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ClearForm(); LoadData();
+        }
+
+        private void BtnGuncelle_Click(object? sender, EventArgs e)
+        {
+            if (selectedId < 0) { MessageBox.Show("Güncellenecek kuryeyi seçin.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            if (txtTelefon.Text.Length != 11)
+            { MessageBox.Show("Eksik numara girildi!\nTelefon numarası 11 haneli olmalıdır. (Örn: 05XX XXX XX XX)", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); txtTelefon.Focus(); return; }
+
+            // Seçili kuryenin mevcut aktif durumunu koru
+            var row = dgv.CurrentRow;
+            int mevcutAktif = row != null ? Convert.ToInt32(row.Cells["Aktif"].Value) : 1;
+
+            DatabaseHelper.UpdateKurye(new Kurye { Id = selectedId, AdSoyad = txtAdSoyad.Text, Telefon = txtTelefon.Text, KuryeTipi = cmbKuryeTipi.Text, Aktif = mevcutAktif });
+            MessageBox.Show("Kurye güncellendi.", "Başarılı", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ClearForm(); LoadData();
+        }
+
+        private void BtnSil_Click(object? sender, EventArgs e)
+        {
+            if (selectedId < 0) { MessageBox.Show("Pasif yapılacak kuryeyi seçin.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            // Zaten pasif mi kontrol et
+            var row = dgv.CurrentRow;
+            if (row != null && Convert.ToInt32(row.Cells["Aktif"].Value) == 0)
+            {
+                MessageBox.Show("Bu kurye zaten pasif durumda.", "Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (MessageBox.Show("Kuryeyi pasif yapmak istediğinize emin misiniz?", "Onay", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            {
+                DatabaseHelper.DeleteKurye(selectedId);
+                ClearForm(); LoadData();
+            }
+        }
+
+        private void BtnAktifYap_Click(object? sender, EventArgs e)
+        {
+            if (selectedId < 0) { MessageBox.Show("Aktif yapılacak kuryeyi seçin.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            // Zaten aktif mi kontrol et
+            var row = dgv.CurrentRow;
+            if (row != null && Convert.ToInt32(row.Cells["Aktif"].Value) == 1)
+            {
+                MessageBox.Show("Bu kurye zaten aktif durumda.", "Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (MessageBox.Show("Kuryeyi tekrar aktif yapmak istediğinize emin misiniz?", "Onay", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            {
+                DatabaseHelper.SetKuryeAktif(selectedId);
+                MessageBox.Show("Kurye aktif yapıldı.", "Başarılı", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ClearForm(); LoadData();
+            }
+        }
+
+        private void TxtTelefon_KeyPress(object? sender, KeyPressEventArgs e)
+        {
+            // Sadece rakam ve Backspace'e izin ver
+            if (!char.IsDigit(e.KeyChar) && !char.IsControl(e.KeyChar))
+            {
+                e.Handled = true;
+            }
+        }
+    }
+}
