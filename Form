@@ -1,0 +1,252 @@
+using KargoYonetim.Data;
+using KargoYonetim.Business;
+
+namespace KargoYonetim.Forms
+{
+    public class FormSiparis : Form
+    {
+        private ComboBox cmbMusteri = null!, cmbKuryeTipi = null!, cmbKurye = null!, cmbDurum = null!;
+        private TextBox txtAciklama = null!;
+        private Label lblTahminiTeslim = null!;
+        private DataGridView dgv = null!;
+
+        public FormSiparis()
+        {
+            InitializeComponents();
+            LoadCombos();
+            LoadData();
+        }
+
+        private void InitializeComponents()
+        {
+            this.Text = "📦 Sipariş Yönetimi";
+            this.Size = new Size(1050, 680);
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.Font = new Font("Segoe UI", 10);
+            this.BackColor = Color.FromArgb(236, 240, 241);
+
+            var pnlHeader = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = Color.FromArgb(27, 40, 56) };
+            pnlHeader.Controls.Add(new Label
+            {
+                Text = "  📦  Sipariş & Planlama",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 14, FontStyle.Bold),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            });
+            this.Controls.Add(pnlHeader);
+
+            // Input panel
+            var pnlInput = new Panel { Dock = DockStyle.Top, Height = 200, BackColor = Color.White, Padding = new Padding(15) };
+
+            // Row 1
+            pnlInput.Controls.Add(new Label { Text = "Müşteri:", Location = new Point(10, 15), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+            cmbMusteri = new ComboBox { Location = new Point(110, 12), Size = new Size(250, 28), DropDownStyle = ComboBoxStyle.DropDownList };
+            pnlInput.Controls.Add(cmbMusteri);
+
+            pnlInput.Controls.Add(new Label { Text = "Kurye Tipi:", Location = new Point(380, 15), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+            cmbKuryeTipi = new ComboBox { Location = new Point(480, 12), Size = new Size(180, 28), DropDownStyle = ComboBoxStyle.DropDownList };
+            cmbKuryeTipi.Items.AddRange(new[] { "Standart", "Ekspres", "AyniGun" });
+            cmbKuryeTipi.SelectedIndex = 0;
+            cmbKuryeTipi.SelectedIndexChanged += CmbKuryeTipi_Changed;
+            pnlInput.Controls.Add(cmbKuryeTipi);
+
+            pnlInput.Controls.Add(new Label { Text = "Kurye:", Location = new Point(680, 15), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+            cmbKurye = new ComboBox { Location = new Point(740, 12), Size = new Size(200, 28), DropDownStyle = ComboBoxStyle.DropDownList };
+            pnlInput.Controls.Add(cmbKurye);
+
+            // Row 2
+            pnlInput.Controls.Add(new Label { Text = "Açıklama:", Location = new Point(10, 55), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+            txtAciklama = new TextBox { Location = new Point(110, 52), Size = new Size(350, 28), BorderStyle = BorderStyle.FixedSingle };
+            pnlInput.Controls.Add(txtAciklama);
+
+            // Tahmini teslim hesaplaması
+            var pnlTahmini = new Panel
+            {
+                Location = new Point(480, 50),
+                Size = new Size(460, 40),
+                BackColor = Color.FromArgb(232, 245, 233),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+            lblTahminiTeslim = new Label
+            {
+                Text = "📅 Tahmini Teslim: " + IsGunuHesaplama.TahminiTeslimHesapla(DateTime.Now, "Standart").ToString("dd.MM.yyyy dddd"),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = Color.FromArgb(27, 94, 32),
+                Padding = new Padding(10, 0, 0, 0)
+            };
+            pnlTahmini.Controls.Add(lblTahminiTeslim);
+            pnlInput.Controls.Add(pnlTahmini);
+
+            // Buttons
+            var btnEkle = CreateButton("➕ Sipariş Ekle", 110, 100, Color.FromArgb(76, 175, 80));
+            btnEkle.Size = new Size(150, 38);
+            btnEkle.Click += BtnEkle_Click;
+            pnlInput.Controls.Add(btnEkle);
+
+            pnlInput.Controls.Add(new Label { Text = "Durum Güncelle:", Location = new Point(290, 105), AutoSize = true, Font = new Font("Segoe UI", 9, FontStyle.Bold) });
+            cmbDurum = new ComboBox { Location = new Point(410, 102), Size = new Size(150, 28), DropDownStyle = ComboBoxStyle.DropDownList };
+            cmbDurum.Items.AddRange(new[] { "Hazırlanıyor", "Yolda", "İptal" });
+            cmbDurum.SelectedIndex = 0;
+            pnlInput.Controls.Add(cmbDurum);
+
+            var btnDurumGuncelle = CreateButton("✏️ Durum Güncelle", 580, 100, Color.FromArgb(33, 150, 243));
+            btnDurumGuncelle.Size = new Size(160, 38);
+            btnDurumGuncelle.Click += BtnDurumGuncelle_Click;
+            pnlInput.Controls.Add(btnDurumGuncelle);
+
+            var btnYenile = CreateButton("🔄 Yenile", 760, 100, Color.FromArgb(117, 117, 117));
+            btnYenile.Click += (s, e) => LoadData();
+            pnlInput.Controls.Add(btnYenile);
+
+            this.Controls.Add(pnlInput);
+
+            // DataGridView
+            dgv = new DataGridView
+            {
+                Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                AutoGenerateColumns = false,
+                BackgroundColor = Color.White, BorderStyle = BorderStyle.None,
+                RowHeadersVisible = false, Font = new Font("Segoe UI", 9),
+                AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(245, 245, 245) },
+                DefaultCellStyle = new DataGridViewCellStyle { SelectionBackColor = Color.FromArgb(33, 150, 243) }
+            };
+            dgv.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.FromArgb(27, 40, 56), ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold), Padding = new Padding(5)
+            };
+            dgv.EnableHeadersVisualStyles = false;
+            dgv.CellFormatting += Dgv_CellFormatting;
+
+            // Manuel kolon tanımları
+            dgv.Columns.AddRange(
+                new DataGridViewTextBoxColumn { Name = "Id", DataPropertyName = "Id", HeaderText = "No", Width = 40 },
+                new DataGridViewTextBoxColumn { Name = "MusteriAdi", DataPropertyName = "MusteriAdi", HeaderText = "Müşteri" },
+                new DataGridViewTextBoxColumn { Name = "KuryeAdi", DataPropertyName = "KuryeAdi", HeaderText = "Kurye" },
+                new DataGridViewTextBoxColumn { Name = "KuryeTipi", DataPropertyName = "KuryeTipi", HeaderText = "Kurye Tipi" },
+                new DataGridViewTextBoxColumn { Name = "SiparisTarihi", DataPropertyName = "SiparisTarihi", HeaderText = "Sipariş Tarihi" },
+                new DataGridViewTextBoxColumn { Name = "TahminiTeslim", DataPropertyName = "TahminiTeslim", HeaderText = "Tahmini Teslim" },
+                new DataGridViewTextBoxColumn { Name = "TeslimTarihi", DataPropertyName = "TeslimTarihi", HeaderText = "Teslim Tarihi" },
+                new DataGridViewTextBoxColumn { Name = "Durum", DataPropertyName = "Durum", HeaderText = "Durum" },
+                new DataGridViewTextBoxColumn { Name = "BasarisizDeneme", DataPropertyName = "BasarisizDeneme", HeaderText = "Başarısız", Width = 60 },
+                new DataGridViewTextBoxColumn { Name = "Aciklama", DataPropertyName = "Aciklama", HeaderText = "Açıklama" }
+            );
+
+            var pnlGrid = new Panel { Dock = DockStyle.Fill, Padding = new Padding(15, 10, 15, 15) };
+            pnlGrid.Controls.Add(dgv);
+
+            // WinForms Dock sıralaması: Fill önce, Top paneller sonra (ters sırada) eklenmeli
+            this.Controls.Clear();
+            this.Controls.Add(pnlGrid);
+            this.Controls.Add(pnlInput);
+            this.Controls.Add(pnlHeader);
+        }
+
+        private Button CreateButton(string text, int x, int y, Color color)
+        {
+            var btn = new Button
+            {
+                Text = text, Location = new Point(x, y), Size = new Size(120, 36),
+                FlatStyle = FlatStyle.Flat, BackColor = color, ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold), Cursor = Cursors.Hand
+            };
+            btn.FlatAppearance.BorderSize = 0;
+            return btn;
+        }
+
+        private void LoadCombos()
+        {
+            var musteriler = DatabaseHelper.GetMusteriler();
+            cmbMusteri.DisplayMember = "AdSoyad";
+            cmbMusteri.ValueMember = "Id";
+            cmbMusteri.DataSource = musteriler;
+
+            var kuryeler = DatabaseHelper.GetKuryeler();
+            cmbKurye.DisplayMember = "AdSoyad";
+            cmbKurye.ValueMember = "Id";
+            cmbKurye.DataSource = kuryeler;
+        }
+
+        private void LoadData()
+        {
+            dgv.DataSource = DatabaseHelper.GetSiparisler();
+        }
+
+        private void CmbKuryeTipi_Changed(object? sender, EventArgs e)
+        {
+            var tip = cmbKuryeTipi.Text;
+            var tahmini = IsGunuHesaplama.TahminiTeslimHesapla(DateTime.Now, tip);
+            lblTahminiTeslim.Text = $"📅 Tahmini Teslim: {tahmini:dd.MM.yyyy dddd} ({IsGunuHesaplama.KuryeTipiAdi(tip)})";
+        }
+
+        private void BtnEkle_Click(object? sender, EventArgs e)
+        {
+            if (cmbMusteri.SelectedValue == null || cmbKurye.SelectedValue == null)
+            { MessageBox.Show("Müşteri ve Kurye seçimi zorunludur.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            var kuryeTipi = cmbKuryeTipi.Text;
+            var tahmini = IsGunuHesaplama.TahminiTeslimHesapla(DateTime.Now, kuryeTipi);
+
+            var siparis = new Siparis
+            {
+                MusteriId = (int)cmbMusteri.SelectedValue,
+                KuryeId = (int)cmbKurye.SelectedValue,
+                KuryeTipi = kuryeTipi,
+                TahminiTeslim = tahmini.ToString("yyyy-MM-dd"),
+                Durum = "Hazırlanıyor",
+                Aciklama = txtAciklama.Text
+            };
+
+            var id = DatabaseHelper.AddSiparis(siparis);
+            MessageBox.Show($"Sipariş #{id} oluşturuldu.\nTahmini Teslim: {tahmini:dd.MM.yyyy dddd}", "Başarılı",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            txtAciklama.Clear();
+            LoadData();
+        }
+
+        private void BtnDurumGuncelle_Click(object? sender, EventArgs e)
+        {
+            if (dgv.SelectedRows.Count == 0) { MessageBox.Show("Sipariş seçin.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            var siparisId = Convert.ToInt32(dgv.SelectedRows[0].Cells["Id"].Value);
+            var mevcutDurum = dgv.SelectedRows[0].Cells["Durum"].Value?.ToString();
+            var yeniDurum = cmbDurum.Text;
+
+            // İş kuralı: Teslim edilmiş siparişin durumu değiştirilemez
+            if (mevcutDurum == "Teslim Edildi")
+            { MessageBox.Show("Teslim edilmiş siparişin durumu değiştirilemez.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            // İş kuralı: İade bekleyen siparişin durumu sadece İptal yapılabilir
+            if (mevcutDurum == "İade Bekliyor" && yeniDurum != "İptal")
+            { MessageBox.Show("İade bekleyen sipariş sadece iptal edilebilir.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            DatabaseHelper.UpdateSiparisDurum(siparisId, yeniDurum);
+            MessageBox.Show($"Sipariş #{siparisId} durumu '{yeniDurum}' olarak güncellendi.", "Başarılı",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            LoadData();
+        }
+
+        private void Dgv_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (dgv.Columns[e.ColumnIndex].Name == "Durum" && e.Value != null)
+            {
+                var durum = e.Value.ToString();
+                e.CellStyle.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+                switch (durum)
+                {
+                    case "Teslim Edildi": e.CellStyle.ForeColor = Color.FromArgb(27, 94, 32); e.CellStyle.BackColor = Color.FromArgb(232, 245, 233); break;
+                    case "Yolda": e.CellStyle.ForeColor = Color.FromArgb(230, 126, 34); e.CellStyle.BackColor = Color.FromArgb(255, 243, 224); break;
+                    case "İade Bekliyor": e.CellStyle.ForeColor = Color.FromArgb(183, 28, 28); e.CellStyle.BackColor = Color.FromArgb(255, 235, 238); break;
+                    case "Gecikmiş": e.CellStyle.ForeColor = Color.White; e.CellStyle.BackColor = Color.FromArgb(183, 28, 28); break;
+                    case "İptal": e.CellStyle.ForeColor = Color.Gray; break;
+                    case "Hazırlanıyor": e.CellStyle.ForeColor = Color.FromArgb(33, 150, 243); break;
+                }
+            }
+        }
+    }
+}
