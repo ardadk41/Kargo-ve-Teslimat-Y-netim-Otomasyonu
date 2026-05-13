@@ -1,0 +1,350 @@
+using KargoYonetim.Data;
+using KargoYonetim.Business;
+using System.Diagnostics;
+
+namespace KargoYonetim.Forms
+{
+    public class FormRaporlar : Form
+    {
+        private DataGridView dgvPerformans = null!, dgvGecikmisSiparis = null!;
+        private Panel pnlChart = null!;
+        private List<KuryePerformans> performansData = new();
+
+        public FormRaporlar()
+        {
+            InitializeComponents();
+            LoadData();
+        }
+
+        private void InitializeComponents()
+        {
+            this.Text = "📊 Raporlar & Analizler";
+            this.Size = new Size(1100, 750);
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.Font = new Font("Segoe UI", 10);
+            this.BackColor = Color.FromArgb(236, 240, 241);
+
+            var pnlHeader = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = Color.FromArgb(27, 40, 56) };
+            pnlHeader.Controls.Add(new Label
+            {
+                Text = "  📊  Kurye & Raporlama — Performans Analizi",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 14, FontStyle.Bold),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            });
+            this.Controls.Add(pnlHeader);
+
+            // Buttons panel
+            var pnlButtons = new Panel { Dock = DockStyle.Top, Height = 65, BackColor = Color.White, Padding = new Padding(15, 12, 15, 12) };
+
+            var btnPdf1 = CreateButton("📄 Kurye Performans PDF", 10, 8, Color.FromArgb(33, 150, 243));
+            btnPdf1.Size = new Size(200, 38);
+            btnPdf1.Click += BtnKuryePerformansPdf_Click;
+            pnlButtons.Controls.Add(btnPdf1);
+
+            var btnPdf2 = CreateButton("📄 Gecikmiş/İade PDF", 225, 8, Color.FromArgb(244, 67, 54));
+            btnPdf2.Size = new Size(190, 38);
+            btnPdf2.Click += BtnGecikmisPdf_Click;
+            pnlButtons.Controls.Add(btnPdf2);
+
+            var btnPdf3 = CreateButton("📄 Aylık Özet PDF", 430, 8, Color.FromArgb(0, 150, 136));
+            btnPdf3.Size = new Size(170, 38);
+            btnPdf3.Click += BtnAylikOzetPdf_Click;
+            pnlButtons.Controls.Add(btnPdf3);
+
+            var btnYenile = CreateButton("🔄 Yenile", 620, 8, Color.FromArgb(117, 117, 117));
+            btnYenile.Size = new Size(110, 38);
+            btnYenile.Click += (s, e) => LoadData();
+            pnlButtons.Controls.Add(btnYenile);
+
+            var btnRaporKlasor = CreateButton("📁 Rapor Klasörü", 745, 8, Color.FromArgb(255, 152, 0));
+            btnRaporKlasor.Size = new Size(160, 38);
+            btnRaporKlasor.Click += (s, e) =>
+            {
+                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Raporlar");
+                if (!Directory.Exists(path)) Directory.CreateDirectory(path);
+                Process.Start("explorer.exe", path);
+            };
+            pnlButtons.Controls.Add(btnRaporKlasor);
+
+            this.Controls.Add(pnlButtons);
+
+            // Main content with split
+            var splitMain = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Horizontal,
+                SplitterDistance = 350,
+                BackColor = Color.FromArgb(236, 240, 241)
+            };
+
+            // Top: Performance table + chart
+            var splitTop = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                SplitterDistance = 550,
+                BackColor = Color.White
+            };
+
+            // Performance table
+            var pnlPerfTitle = new Label
+            {
+                Text = "  Kurye Performans Tablosu",
+                Dock = DockStyle.Top,
+                Height = 30,
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                ForeColor = Color.FromArgb(27, 40, 56),
+                BackColor = Color.White
+            };
+
+            dgvPerformans = CreateDataGridView();
+            dgvPerformans.Columns.AddRange(
+                new DataGridViewTextBoxColumn { Name = "KuryeAdi", DataPropertyName = "KuryeAdi", HeaderText = "Kurye" },
+                new DataGridViewTextBoxColumn { Name = "KuryeTipi", DataPropertyName = "KuryeTipi", HeaderText = "Tipi" },
+                new DataGridViewTextBoxColumn { Name = "ToplamDeneme", DataPropertyName = "ToplamDeneme", HeaderText = "Toplam" },
+                new DataGridViewTextBoxColumn { Name = "BasariliDeneme", DataPropertyName = "BasariliDeneme", HeaderText = "Başarılı" },
+                new DataGridViewTextBoxColumn { Name = "BasariOrani", DataPropertyName = "BasariOrani", HeaderText = "Oran %" },
+                new DataGridViewTextBoxColumn { Name = "OrtTeslimGun", DataPropertyName = "OrtTeslimGun", HeaderText = "Ort. Gün" }
+            );
+            splitTop.Panel1.Controls.Add(dgvPerformans);
+            splitTop.Panel1.Controls.Add(pnlPerfTitle);
+
+            // Chart panel
+            pnlChart = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.White,
+                Padding = new Padding(10)
+            };
+            pnlChart.Paint += PnlChart_Paint;
+
+            var lblChartTitle = new Label
+            {
+                Text = "  Başarı Oranı Grafiği",
+                Dock = DockStyle.Top,
+                Height = 30,
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                ForeColor = Color.FromArgb(27, 40, 56),
+                BackColor = Color.White
+            };
+
+            splitTop.Panel2.Controls.Add(pnlChart);
+            splitTop.Panel2.Controls.Add(lblChartTitle);
+
+            splitMain.Panel1.Controls.Add(splitTop);
+
+            // Bottom: Gecikmiş siparişler
+            var lblGecikTitle = new Label
+            {
+                Text = "  Gecikmiş ve İade Bekleyen Siparişler",
+                Dock = DockStyle.Top,
+                Height = 30,
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                ForeColor = Color.FromArgb(183, 28, 28),
+                BackColor = Color.White
+            };
+
+            dgvGecikmisSiparis = CreateDataGridView();
+            dgvGecikmisSiparis.CellFormatting += DgvGecikmisSiparis_CellFormatting;
+            dgvGecikmisSiparis.Columns.AddRange(
+                new DataGridViewTextBoxColumn { Name = "Id", DataPropertyName = "Id", HeaderText = "No", Width = 40 },
+                new DataGridViewTextBoxColumn { Name = "MusteriAdi", DataPropertyName = "MusteriAdi", HeaderText = "Müşteri" },
+                new DataGridViewTextBoxColumn { Name = "KuryeAdi", DataPropertyName = "KuryeAdi", HeaderText = "Kurye" },
+                new DataGridViewTextBoxColumn { Name = "KuryeTipi", DataPropertyName = "KuryeTipi", HeaderText = "Tip" },
+                new DataGridViewTextBoxColumn { Name = "SiparisTarihi", DataPropertyName = "SiparisTarihi", HeaderText = "Sipariş Tarihi" },
+                new DataGridViewTextBoxColumn { Name = "TahminiTeslim", DataPropertyName = "TahminiTeslim", HeaderText = "Tahmini Teslim" },
+                new DataGridViewTextBoxColumn { Name = "Durum", DataPropertyName = "Durum", HeaderText = "Durum" }
+            );
+
+            splitMain.Panel2.Controls.Add(dgvGecikmisSiparis);
+            splitMain.Panel2.Controls.Add(lblGecikTitle);
+
+            var pnlMain = new Panel { Dock = DockStyle.Fill, Padding = new Padding(15, 5, 15, 15) };
+            pnlMain.Controls.Add(splitMain);
+
+            // WinForms Dock sıralaması: Fill önce, Top paneller sonra (ters sırada) eklenmeli
+            this.Controls.Clear();
+            this.Controls.Add(pnlMain);
+            this.Controls.Add(pnlButtons);
+            this.Controls.Add(pnlHeader);
+        }
+
+        private DataGridView CreateDataGridView()
+        {
+            var dgv = new DataGridView
+            {
+                Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                AutoGenerateColumns = false,
+                BackgroundColor = Color.White, BorderStyle = BorderStyle.None,
+                RowHeadersVisible = false, Font = new Font("Segoe UI", 9),
+                AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(245, 245, 245) },
+                DefaultCellStyle = new DataGridViewCellStyle { SelectionBackColor = Color.FromArgb(33, 150, 243) }
+            };
+            dgv.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.FromArgb(27, 40, 56), ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold), Padding = new Padding(5)
+            };
+            dgv.EnableHeadersVisualStyles = false;
+            return dgv;
+        }
+
+        private Button CreateButton(string text, int x, int y, Color color)
+        {
+            var btn = new Button
+            {
+                Text = text, Location = new Point(x, y), Size = new Size(120, 36),
+                FlatStyle = FlatStyle.Flat, BackColor = color, ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold), Cursor = Cursors.Hand
+            };
+            btn.FlatAppearance.BorderSize = 0;
+            return btn;
+        }
+
+        private void LoadData()
+        {
+            performansData = DatabaseHelper.GetKuryePerformans();
+            dgvPerformans.DataSource = performansData;
+
+            var gecikmisList = DatabaseHelper.GetGecikmisSiparisler();
+            var iadeList = DatabaseHelper.GetIadeSiparisler();
+            var combined = gecikmisList.Concat(iadeList.Where(i => !gecikmisList.Any(g => g.Id == i.Id))).ToList();
+            dgvGecikmisSiparis.DataSource = combined;
+
+            pnlChart.Invalidate();
+        }
+
+        // GDI+ Bar Chart
+        private void PnlChart_Paint(object? sender, PaintEventArgs e)
+        {
+            if (performansData.Count == 0) return;
+
+            var g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            int padding = 20;
+            int chartX = padding + 10;
+            int chartY = padding;
+            int chartW = pnlChart.Width - padding * 2 - 10;
+            int chartH = pnlChart.Height - padding * 2 - 20;
+
+            if (chartW <= 0 || chartH <= 0) return;
+
+            int barCount = performansData.Count;
+            int barWidth = Math.Min(50, (chartW - 20) / Math.Max(barCount, 1) - 10);
+            int spacing = (chartW - barCount * barWidth) / (barCount + 1);
+
+            Color[] barColors = {
+                Color.FromArgb(33, 150, 243),
+                Color.FromArgb(76, 175, 80),
+                Color.FromArgb(255, 152, 0),
+                Color.FromArgb(156, 39, 176),
+                Color.FromArgb(0, 150, 136),
+                Color.FromArgb(244, 67, 54)
+            };
+
+            // Draw background lines
+            for (int i = 0; i <= 4; i++)
+            {
+                int y = chartY + chartH - (chartH * i / 4);
+                g.DrawLine(Pens.LightGray, chartX, y, chartX + chartW, y);
+                g.DrawString($"{i * 25}%", new Font("Segoe UI", 7), Brushes.Gray, 0, y - 7);
+            }
+
+            // Draw bars
+            for (int i = 0; i < barCount; i++)
+            {
+                var p = performansData[i];
+                int barH = (int)(chartH * p.BasariOrani / 100.0);
+                int x = chartX + spacing + i * (barWidth + spacing);
+                int y = chartY + chartH - barH;
+
+                var color = barColors[i % barColors.Length];
+                using var brush = new SolidBrush(color);
+                g.FillRectangle(brush, x, y, barWidth, barH);
+
+                // Value label
+                var valText = $"%{p.BasariOrani:F0}";
+                var valSize = g.MeasureString(valText, new Font("Segoe UI", 8, FontStyle.Bold));
+                g.DrawString(valText, new Font("Segoe UI", 8, FontStyle.Bold), Brushes.Black,
+                    x + (barWidth - valSize.Width) / 2, y - valSize.Height - 2);
+
+                // Name label
+                var nameSize = g.MeasureString(p.KuryeAdi, new Font("Segoe UI", 7));
+                g.DrawString(p.KuryeAdi, new Font("Segoe UI", 7), Brushes.Black,
+                    x + (barWidth - nameSize.Width) / 2, chartY + chartH + 3);
+            }
+        }
+
+        private void BtnKuryePerformansPdf_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                var path = PdfRaporlar.KuryePerformansRaporu();
+                MessageBox.Show($"Rapor oluşturuldu:\n{path}", "PDF Oluşturuldu",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Rapor oluşturulurken hata:\n{ex.Message}", "Hata",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void BtnGecikmisPdf_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                var path = PdfRaporlar.GecikmisSiparisRaporu();
+                MessageBox.Show($"Rapor oluşturuldu:\n{path}", "PDF Oluşturuldu",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Rapor oluşturulurken hata:\n{ex.Message}", "Hata",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void BtnAylikOzetPdf_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                var path = PdfRaporlar.AylikOzetRaporu();
+                MessageBox.Show($"Rapor oluşturuldu:\n{path}", "PDF Oluşturuldu",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Rapor oluşturulurken hata:\n{ex.Message}", "Hata",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void DgvGecikmisSiparis_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (dgvGecikmisSiparis.Columns[e.ColumnIndex].Name == "Durum" && e.Value != null)
+            {
+                e.CellStyle.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+                switch (e.Value.ToString())
+                {
+                    case "Gecikmiş":
+                        e.CellStyle.ForeColor = Color.White;
+                        e.CellStyle.BackColor = Color.FromArgb(183, 28, 28);
+                        break;
+                    case "İade Bekliyor":
+                        e.CellStyle.ForeColor = Color.FromArgb(183, 28, 28);
+                        e.CellStyle.BackColor = Color.FromArgb(255, 235, 238);
+                        break;
+                }
+            }
+        }
+    }
+}
