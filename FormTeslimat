@@ -1,0 +1,358 @@
+using KargoYonetim.Data;
+using KargoYonetim.Business;
+
+namespace KargoYonetim.Forms
+{
+    public class FormTeslimat : Form
+    {
+        private ComboBox cmbSiparis = null!, cmbSonuc = null!;
+        private TextBox txtAciklama = null!, txtSifirlamaNeden = null!;
+        private Label lblSiparisInfo = null!, lblDenemeCount = null!;
+        private DataGridView dgvDenemeler = null!;
+        private List<Siparis> siparisler = new();
+
+        public FormTeslimat()
+        {
+            InitializeComponents();
+            LoadSiparisler();
+        }
+
+        private void InitializeComponents()
+        {
+            this.Text = "📋 Teslimat Takibi";
+            this.Size = new Size(1000, 700);
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.Font = new Font("Segoe UI", 10);
+            this.BackColor = Color.FromArgb(236, 240, 241);
+
+            var pnlHeader = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = Color.FromArgb(27, 40, 56) };
+            pnlHeader.Controls.Add(new Label
+            {
+                Text = "  📋  Teslimat Takibi — Deneme Kaydı & Sayaç",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 14, FontStyle.Bold),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            });
+            this.Controls.Add(pnlHeader);
+
+            // Input panel
+            var pnlInput = new Panel { Dock = DockStyle.Top, Height = 280, BackColor = Color.White, Padding = new Padding(15) };
+
+            // Row 1: Sipariş Seçimi
+            pnlInput.Controls.Add(new Label { Text = "Sipariş Seçin:", Location = new Point(10, 15), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+            cmbSiparis = new ComboBox { Location = new Point(130, 12), Size = new Size(400, 28), DropDownStyle = ComboBoxStyle.DropDownList };
+            cmbSiparis.SelectedIndexChanged += CmbSiparis_Changed;
+            pnlInput.Controls.Add(cmbSiparis);
+
+            var btnYenile = CreateButton("🔄", 545, 10, Color.FromArgb(117, 117, 117));
+            btnYenile.Size = new Size(40, 30);
+            btnYenile.Click += (s, e) => LoadSiparisler();
+            pnlInput.Controls.Add(btnYenile);
+
+            // Sipariş info panel
+            var pnlInfo = new Panel
+            {
+                Location = new Point(10, 50),
+                Size = new Size(940, 50),
+                BackColor = Color.FromArgb(232, 245, 233),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+            lblSiparisInfo = new Label
+            {
+                Text = "Sipariş seçin...",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font("Segoe UI", 10),
+                Padding = new Padding(10, 0, 0, 0)
+            };
+            pnlInfo.Controls.Add(lblSiparisInfo);
+            pnlInput.Controls.Add(pnlInfo);
+
+            // Deneme sayacı
+            lblDenemeCount = new Label
+            {
+                Text = "Başarısız Deneme: 0 / 3",
+                Location = new Point(600, 15),
+                AutoSize = true,
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                ForeColor = Color.FromArgb(27, 94, 32)
+            };
+            pnlInput.Controls.Add(lblDenemeCount);
+
+            // Row 2: Deneme kaydı
+            pnlInput.Controls.Add(new Label { Text = "Sonuç:", Location = new Point(10, 115), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+            cmbSonuc = new ComboBox { Location = new Point(130, 112), Size = new Size(150, 28), DropDownStyle = ComboBoxStyle.DropDownList };
+            cmbSonuc.Items.AddRange(new[] { "Başarılı", "Başarısız" });
+            cmbSonuc.SelectedIndex = 0;
+            pnlInput.Controls.Add(cmbSonuc);
+
+            pnlInput.Controls.Add(new Label { Text = "Açıklama:", Location = new Point(300, 115), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+            txtAciklama = new TextBox { Location = new Point(400, 112), Size = new Size(300, 28), BorderStyle = BorderStyle.FixedSingle };
+            pnlInput.Controls.Add(txtAciklama);
+
+            var btnDenemeKaydet = CreateButton("📝 Deneme Kaydet", 720, 110, Color.FromArgb(33, 150, 243));
+            btnDenemeKaydet.Size = new Size(160, 36);
+            btnDenemeKaydet.Click += BtnDenemeKaydet_Click;
+            pnlInput.Controls.Add(btnDenemeKaydet);
+
+            // Row 3: Sayaç sıfırlama
+            pnlInput.Controls.Add(new Label
+            {
+                Text = "── Sayaç Sıfırlama ──",
+                Location = new Point(10, 160),
+                AutoSize = true,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                ForeColor = Color.FromArgb(183, 28, 28)
+            });
+
+            pnlInput.Controls.Add(new Label { Text = "Neden:", Location = new Point(10, 190), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) });
+            txtSifirlamaNeden = new TextBox { Location = new Point(130, 188), Size = new Size(400, 28), BorderStyle = BorderStyle.FixedSingle };
+            pnlInput.Controls.Add(txtSifirlamaNeden);
+
+            var btnSifirla = CreateButton("🔄 Sayaç Sıfırla", 550, 185, Color.FromArgb(183, 28, 28));
+            btnSifirla.Size = new Size(150, 36);
+            btnSifirla.Click += BtnSifirla_Click;
+            pnlInput.Controls.Add(btnSifirla);
+
+            // Warning label
+            var lblUyari = new Label
+            {
+                Text = "⚠️ 3 başarısız denemede sipariş otomatik olarak 'İade Bekliyor' durumuna alınır.",
+                Location = new Point(10, 230),
+                AutoSize = true,
+                Font = new Font("Segoe UI", 9, FontStyle.Italic),
+                ForeColor = Color.FromArgb(230, 126, 34)
+            };
+            pnlInput.Controls.Add(lblUyari);
+
+            this.Controls.Add(pnlInput);
+
+            // DataGridView for deneme geçmişi
+            dgvDenemeler = new DataGridView
+            {
+                Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                AutoGenerateColumns = false,
+                BackgroundColor = Color.White, BorderStyle = BorderStyle.None,
+                RowHeadersVisible = false, Font = new Font("Segoe UI", 9),
+                AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(245, 245, 245) },
+                DefaultCellStyle = new DataGridViewCellStyle { SelectionBackColor = Color.FromArgb(33, 150, 243) }
+            };
+            dgvDenemeler.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.FromArgb(27, 40, 56), ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold), Padding = new Padding(5)
+            };
+            dgvDenemeler.EnableHeadersVisualStyles = false;
+            dgvDenemeler.CellFormatting += DgvDenemeler_CellFormatting;
+
+            dgvDenemeler.Columns.AddRange(
+                new DataGridViewTextBoxColumn { Name = "Id", DataPropertyName = "Id", HeaderText = "No", Width = 50 },
+                new DataGridViewTextBoxColumn { Name = "DenemeTarihi", DataPropertyName = "DenemeTarihi", HeaderText = "Deneme Tarihi" },
+                new DataGridViewTextBoxColumn { Name = "Sonuc", DataPropertyName = "Sonuc", HeaderText = "Sonuç" },
+                new DataGridViewTextBoxColumn { Name = "Aciklama", DataPropertyName = "Aciklama", HeaderText = "Açıklama" }
+            );
+
+            var pnlGrid = new Panel { Dock = DockStyle.Fill, Padding = new Padding(15, 5, 15, 15) };
+            var lblGridTitle = new Label
+            {
+                Text = "Deneme Geçmişi",
+                Dock = DockStyle.Top,
+                Height = 30,
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                ForeColor = Color.FromArgb(27, 40, 56)
+            };
+            pnlGrid.Controls.Add(dgvDenemeler);
+            pnlGrid.Controls.Add(lblGridTitle);
+
+            // WinForms Dock sıralaması: Fill önce, Top paneller sonra (ters sırada) eklenmeli
+            this.Controls.Clear();
+            this.Controls.Add(pnlGrid);
+            this.Controls.Add(pnlInput);
+            this.Controls.Add(pnlHeader);
+        }
+
+        private Button CreateButton(string text, int x, int y, Color color)
+        {
+            var btn = new Button
+            {
+                Text = text, Location = new Point(x, y), Size = new Size(120, 36),
+                FlatStyle = FlatStyle.Flat, BackColor = color, ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold), Cursor = Cursors.Hand
+            };
+            btn.FlatAppearance.BorderSize = 0;
+            return btn;
+        }
+
+        private void LoadSiparisler()
+        {
+            siparisler = DatabaseHelper.GetSiparisler()
+                .Where(s => s.Durum != "Teslim Edildi" && s.Durum != "İptal")
+                .ToList();
+
+            cmbSiparis.DataSource = null;
+            cmbSiparis.DisplayMember = "Display";
+            cmbSiparis.ValueMember = "Id";
+
+            var displayList = siparisler.Select(s => new
+            {
+                s.Id,
+                Display = $"#{s.Id} — {s.MusteriAdi} — {s.Durum} ({s.KuryeTipi})"
+            }).ToList();
+
+            cmbSiparis.DataSource = displayList;
+        }
+
+        private void CmbSiparis_Changed(object? sender, EventArgs e)
+        {
+            if (cmbSiparis.SelectedValue == null) return;
+            var siparisId = (int)cmbSiparis.SelectedValue;
+            var siparis = DatabaseHelper.GetSiparis(siparisId);
+            if (siparis == null) return;
+
+            lblSiparisInfo.Text = $"Müşteri: {siparis.MusteriAdi} | Kurye: {siparis.KuryeAdi ?? "Atanmadı"} | " +
+                $"Durum: {siparis.Durum} | Tip: {IsGunuHesaplama.KuryeTipiAdi(siparis.KuryeTipi)} | " +
+                $"Tahmini: {siparis.TahminiTeslim}";
+
+            var basarisiz = DatabaseHelper.GetBasarisizDenemeSayisi(siparisId);
+            lblDenemeCount.Text = $"Başarısız Deneme: {basarisiz} / 3";
+            lblDenemeCount.ForeColor = basarisiz >= 3 ? Color.FromArgb(183, 28, 28) :
+                basarisiz >= 2 ? Color.FromArgb(230, 126, 34) : Color.FromArgb(27, 94, 32);
+
+            LoadDenemeler(siparisId);
+        }
+
+        private void LoadDenemeler(int siparisId)
+        {
+            dgvDenemeler.DataSource = DatabaseHelper.GetDenemeler(siparisId);
+        }
+
+        private void BtnDenemeKaydet_Click(object? sender, EventArgs e)
+        {
+            if (cmbSiparis.SelectedValue == null)
+            { MessageBox.Show("Sipariş seçin.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            var siparisId = (int)cmbSiparis.SelectedValue;
+            var siparis = DatabaseHelper.GetSiparis(siparisId);
+            if (siparis == null) return;
+
+            // İş Kuralı: Teslim edilmiş siparişe deneme yapılamaz
+            if (siparis.Durum == "Teslim Edildi")
+            {
+                MessageBox.Show("Teslim edilmiş siparişe teslimat denemesi yapılamaz.", "İş Kuralı",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // İş Kuralı: İptal edilmiş siparişe deneme yapılamaz
+            if (siparis.Durum == "İptal")
+            {
+                MessageBox.Show("İptal edilmiş siparişe teslimat denemesi yapılamaz.", "İş Kuralı",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var sonuc = cmbSonuc.Text;
+
+            // Denemeyi kaydet (Edge Case: Aynı gün iki deneme yapılabilir, engel yok)
+            DatabaseHelper.AddDeneme(new Deneme
+            {
+                SiparisId = siparisId,
+                Sonuc = sonuc,
+                Aciklama = txtAciklama.Text
+            });
+
+            if (sonuc == "Başarılı")
+            {
+                // Teslim edildi
+                DatabaseHelper.UpdateSiparisDurum(siparisId, "Teslim Edildi",
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                MessageBox.Show($"Sipariş #{siparisId} başarıyla teslim edildi! ✅", "Teslim Edildi",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                // Başarısız deneme — sayaç kontrolü
+                var basarisiz = DatabaseHelper.GetBasarisizDenemeSayisi(siparisId);
+
+                if (basarisiz >= 3)
+                {
+                    // İş Kuralı: 3 başarısız deneme → otomatik İade Bekliyor
+                    DatabaseHelper.UpdateSiparisDurum(siparisId, "İade Bekliyor");
+                    MessageBox.Show(
+                        $"⚠️ Sipariş #{siparisId} — 3 başarısız deneme!\n" +
+                        "Sipariş otomatik olarak 'İade Bekliyor' durumuna alındı.",
+                        "İade Sürecine Alındı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                else
+                {
+                    MessageBox.Show(
+                        $"Başarısız deneme kaydedildi.\nKalan deneme hakkı: {3 - basarisiz}",
+                        "Başarısız Deneme", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+
+            txtAciklama.Clear();
+            LoadSiparisler();
+            // Reselect the same siparis if still exists
+            for (int i = 0; i < cmbSiparis.Items.Count; i++)
+            {
+                var item = cmbSiparis.Items[i];
+                var prop = item?.GetType().GetProperty("Id");
+                if (prop != null && (int)prop.GetValue(item)! == siparisId)
+                {
+                    cmbSiparis.SelectedIndex = i;
+                    break;
+                }
+            }
+        }
+
+        private void BtnSifirla_Click(object? sender, EventArgs e)
+        {
+            if (cmbSiparis.SelectedValue == null)
+            { MessageBox.Show("Sipariş seçin.", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+            if (string.IsNullOrWhiteSpace(txtSifirlamaNeden.Text))
+            {
+                MessageBox.Show("Sayaç sıfırlama nedeni zorunludur.\n(Kim, ne zaman, neden)", "Uyarı",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var siparisId = (int)cmbSiparis.SelectedValue;
+
+            if (MessageBox.Show(
+                $"Sipariş #{siparisId} için sayaç sıfırlanacak.\nNeden: {txtSifirlamaNeden.Text}\n\nDevam etmek istiyor musunuz?",
+                "Sayaç Sıfırlama Onayı", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            {
+                // Edge Case: Sayaç sıfırlandıktan sonra sayaç 1'den başlar
+                DatabaseHelper.SayacSifirla(siparisId, txtSifirlamaNeden.Text);
+                MessageBox.Show("Sayaç sıfırlandı. Log kaydı oluşturuldu.", "Başarılı",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                txtSifirlamaNeden.Clear();
+                CmbSiparis_Changed(null, EventArgs.Empty);
+            }
+        }
+
+        private void DgvDenemeler_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (dgvDenemeler.Columns[e.ColumnIndex].Name == "Sonuc" && e.Value != null)
+            {
+                e.CellStyle.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+                if (e.Value.ToString() == "Başarılı")
+                {
+                    e.CellStyle.ForeColor = Color.FromArgb(27, 94, 32);
+                    e.CellStyle.BackColor = Color.FromArgb(232, 245, 233);
+                }
+                else
+                {
+                    e.CellStyle.ForeColor = Color.FromArgb(183, 28, 28);
+                    e.CellStyle.BackColor = Color.FromArgb(255, 235, 238);
+                }
+            }
+        }
+    }
+}
